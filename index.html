@@ -173373,6 +173373,21 @@ function pasteBox(e){
 $('pbox').addEventListener('paste',pasteBox);
 $('pbox').addEventListener('input',()=>{$('pbox').innerHTML='';});
 $('pasteb').onclick=()=>pasteShot(false);
+// zero-tap route: a Shortcut opens this page with the screenshot as base64 in the address (#img=...)
+function fromHash(){
+  const m=/^#img=(.+)$/.exec(location.hash);if(!m)return;
+  try{
+    let s=m[1];try{s=decodeURIComponent(s);}catch(e){}
+    s=s.replace(/[\s]/g,'').replace(/-/g,'+').replace(/_/g,'/');
+    while(s.length%4)s+='=';
+    const bin=atob(s),u=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)u[i]=bin.charCodeAt(i);
+    try{history.replaceState(null,'',location.pathname+location.search);}catch(e){}
+    const type=(u[0]===0x89)?'image/png':'image/jpeg';
+    const go=()=>{if(!TPL||!trie){setTimeout(go,300);return;}handleImage(new Blob([u],{type}));};
+    msg('Got the screenshot from the Shortcut…');go();
+  }catch(err){msg('Could not read the screenshot sent by the Shortcut ('+(err&&err.message||err)+').');}
+}
+fromHash();
 if(/[?&]auto=1/.test(location.search))setTimeout(()=>{pasteShot(true);},1500);
 // keyboard
 let kh='';'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').forEach(L=>kh+='<button data-k="'+L+'">'+L+'</button>');kh+='<button data-k="BS">⌫</button>';$('kb').innerHTML=kh;
