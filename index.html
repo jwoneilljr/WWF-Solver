@@ -44,6 +44,8 @@ label{font-size:12px;font-weight:600;color:#555;display:block;margin:0 0 3px}
 <h1>Words With Friends Solver <small>ENABLE word list</small></h1>
 <div class="card" id="shotwrap"><label>Easiest: screenshot your game, then pick it here (read on this phone)</label>
 <div class="row"><button class="pri" id="pasteb">📋 Paste latest screenshot</button></div>
+<div id="pmsg" class="m" style="display:none;margin-top:6px;font-weight:600"></div>
+<div id="pbox" contenteditable="true" style="margin-top:8px;padding:12px;border:2px dashed #94a3b8;border-radius:10px;font-size:14px;color:#475569;min-height:20px" data-ph="1">Backup: press and hold here, then tap Paste</div>
 <div class="row" style="margin-top:8px"><button class="pri" id="shotb" onclick="document.getElementById('shot').click()">📷 Upload screenshot</button><input type="file" id="shot" accept="image/*" style="display:none"></div></div>
 <div class="card" id="best" style="display:none;background:#efeaff"></div>
 <div class="card"><div id="board"></div>
@@ -173347,14 +173349,29 @@ async function handleImage(f){
 }
 $('shot').addEventListener('change',async e=>{const f=e.target.files&&e.target.files[0];if(f)await handleImage(f);e.target.value='';});
 // one-tap path: a Shortcut copies the newest screenshot, this button reads it from the clipboard
+function pmsg(t){const e=$('pmsg');if(e){e.textContent=t;e.style.display=t?'block':'none';}msg(t);}
 async function pasteShot(auto){
   try{
-    const items=await navigator.clipboard.read();
-    for(const it of items){const ty=it.types.find(t=>t.startsWith('image/'));if(ty){await handleImage(await it.getType(ty));return true;}}
-    if(!auto)msg('The clipboard has no screenshot. Run the Shortcut again, or use Upload screenshot.');
-  }catch(err){if(!auto)msg('Could not read the clipboard ('+(err&&err.name||err)+'). Tap Paste again and allow it, or use Upload screenshot.');}
+    if(!auto)pmsg('Asking for the clipboard… if iPhone shows a Paste prompt, tap it.');
+    if(!navigator.clipboard||!navigator.clipboard.read)throw new Error('this browser cannot read the clipboard here');
+    const items=await Promise.race([navigator.clipboard.read(),new Promise((_,rej)=>setTimeout(()=>rej(new Error('timed out waiting for Paste')),20000))]);
+    const seen=[];
+    for(const it of items){seen.push(it.types.join('+')||'nothing');const ty=it.types.find(t=>t.startsWith('image/'));if(ty){pmsg('Got the screenshot, reading it…');await handleImage(await it.getType(ty));$('pmsg').style.display='none';return true;}}
+    if(!auto)pmsg('The clipboard holds no picture (it has: '+(seen.join(', ')||'nothing')+'). Run the Shortcut again, then try the box below.');
+  }catch(err){if(!auto)pmsg('Could not read the clipboard ('+(err&&err.message||err)+'). Try the box below instead.');}
   return false;
 }
+// second route: long-press the box, choose Paste (iPhone treats this as a normal paste)
+function pasteBox(e){
+  const cd=e.clipboardData;if(!cd)return;
+  let f=null;for(const it of cd.items||[]){if(it.type&&it.type.startsWith('image/')){f=it.getAsFile();break;}}
+  if(!f&&cd.files&&cd.files.length)f=cd.files[0];
+  e.preventDefault();
+  if(f){pmsg('Got the screenshot, reading it…');handleImage(f).then(()=>{$('pmsg').style.display='none';});}
+  else pmsg('That paste had no picture in it. Run the Shortcut again and paste again.');
+}
+$('pbox').addEventListener('paste',pasteBox);
+$('pbox').addEventListener('input',()=>{$('pbox').innerHTML='';});
 $('pasteb').onclick=()=>pasteShot(false);
 if(/[?&]auto=1/.test(location.search))setTimeout(()=>{pasteShot(true);},1500);
 // keyboard
