@@ -43,7 +43,8 @@ label{font-size:12px;font-weight:600;color:#555;display:block;margin:0 0 3px}
 </style></head><body><div class="wrap">
 <h1>Words With Friends Solver <small>ENABLE word list</small></h1>
 <div class="card" id="shotwrap"><label>Easiest: screenshot your game, then pick it here (read on this phone)</label>
-<div class="row"><button class="pri" id="shotb" onclick="document.getElementById('shot').click()">📷 Upload screenshot</button><input type="file" id="shot" accept="image/*" style="display:none"></div></div>
+<div class="row"><button class="pri" id="pasteb">📋 Paste latest screenshot</button></div>
+<div class="row" style="margin-top:8px"><button class="pri" id="shotb" onclick="document.getElementById('shot').click()">📷 Upload screenshot</button><input type="file" id="shot" accept="image/*" style="display:none"></div></div>
 <div class="card" id="best" style="display:none;background:#efeaff"></div>
 <div class="card"><div id="board"></div>
 <div class="row" style="margin-top:8px"><button id="dirb">Typing →</button><button id="blankb">Blank tile</button><button id="clearb">Clear board</button></div>
@@ -173317,10 +173318,9 @@ async function readFile(f){
   const x=c.getContext('2d',{willReadFrequently:true});x.drawImage(bmp,0,0);
   return x.getImageData(0,0,w,h);
 }
-$('shot').addEventListener('change',async e=>{
-  const f=e.target.files&&e.target.files[0];if(!f)return;
-  if(!TPL||!trie){msg('Still loading, try again in a moment.');e.target.value='';return;}
-  msg('Reading your screenshot…');$('shotb').disabled=true;
+async function handleImage(f){
+  if(!TPL||!trie){msg('Still loading, try again in a moment.');return;}
+  msg('Reading your screenshot…');$('shotb').disabled=true;$('pasteb').disabled=true;
   try{
     const id=await readFile(f);
     const r=WWFReader.readShot(id,TPL,{});
@@ -173343,8 +173343,20 @@ $('shot').addEventListener('change',async e=>{
     const note='Read '+nTiles+' tiles'+(unread?' ('+unread+' could not be read)':'')+(us.size?'; red-outlined squares are less certain, so check them':'')+(learnedNow.length?'. Learned from the board: '+learnedNow.join(', '):'')+'.';
     if(rack)find(note);else msg(note+' No rack found, so type it in.');
   }catch(err){msg('Could not read the screenshot: '+(err&&err.message||err));}
-  $('shotb').disabled=false;e.target.value='';
-});
+  $('shotb').disabled=false;$('pasteb').disabled=false;
+}
+$('shot').addEventListener('change',async e=>{const f=e.target.files&&e.target.files[0];if(f)await handleImage(f);e.target.value='';});
+// one-tap path: a Shortcut copies the newest screenshot, this button reads it from the clipboard
+async function pasteShot(auto){
+  try{
+    const items=await navigator.clipboard.read();
+    for(const it of items){const ty=it.types.find(t=>t.startsWith('image/'));if(ty){await handleImage(await it.getType(ty));return true;}}
+    if(!auto)msg('The clipboard has no screenshot. Run the Shortcut again, or use Upload screenshot.');
+  }catch(err){if(!auto)msg('Could not read the clipboard ('+(err&&err.name||err)+'). Tap Paste again and allow it, or use Upload screenshot.');}
+  return false;
+}
+$('pasteb').onclick=()=>pasteShot(false);
+if(/[?&]auto=1/.test(location.search))setTimeout(()=>{pasteShot(true);},1500);
 // keyboard
 let kh='';'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').forEach(L=>kh+='<button data-k="'+L+'">'+L+'</button>');kh+='<button data-k="BS">⌫</button>';$('kb').innerHTML=kh;
 render();showResults();msg('Loading dictionary…');
