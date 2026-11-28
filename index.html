@@ -173235,28 +173235,40 @@ function showResults(){
   }else bar.style.display='none';
 }
 const defCache={};
-try{Object.assign(defCache,JSON.parse(localStorage.getItem('wwf1def')||'{}'));}catch(e){}
-function shortDef(j){
-  try{
-    for(const ent of j)for(const m of ent.meanings||[])for(const d of m.definitions||[]){
-      let t=(d.definition||'').trim();if(!t)continue;
-      if(t.length>110){t=t.slice(0,110);t=t.replace(/\s+\S*$/,'')+'…';}
-      return (m.partOfSpeech?m.partOfSpeech+': ':'')+t;
-    }
-  }catch(e){}
+try{Object.assign(defCache,JSON.parse(localStorage.getItem('wwf2def')||'{}'));}catch(e){}
+try{localStorage.removeItem('wwf1def');}catch(e){}
+function clip(t){t=(t||'').replace(/<[^>]*>/g,'').replace(/&[a-z#0-9]+;/gi,' ').replace(/\s+/g,' ').trim();if(t.length>110){t=t.slice(0,110).replace(/\s+\S*$/,'')+'…';}return t;}
+function defFromDictApi(j){
+  for(const ent of j)for(const m of ent.meanings||[])for(const d of m.definitions||[]){const t=clip(d.definition);if(t)return (m.partOfSpeech?m.partOfSpeech.toLowerCase()+': ':'')+t;}
   return '';
 }
+function defFromWikt(j){
+  const sec=j&&j.en||[];
+  for(const m of sec)for(const d of m.definitions||[]){const t=clip(d.definition);if(t&&!/^(plural|present participle|past tense|third-person|simple past|alternative|obsolete spelling)/i.test(t))return (m.partOfSpeech?m.partOfSpeech.toLowerCase()+': ':'')+t;}
+  return '';
+}
+async function getJson(url){
+  const ctl=new AbortController();const to=setTimeout(()=>ctl.abort(),7000);
+  try{const r=await fetch(url,{signal:ctl.signal});clearTimeout(to);
+    if(r.status===404)return {none:true};
+    if(!r.ok)return {err:true};
+    return {j:await r.json()};
+  }catch(e){clearTimeout(to);return {err:true};}
+}
 async function showDef(w){
-  const el=()=>$('def');
-  const put=t=>{if(el()&&preview&&preview.word===w)el().textContent=t;};
-  if(defCache[w]!==undefined){put(defCache[w]||'No short meaning found for this word.');return;}
-  try{
-    const ctl=new AbortController();const to=setTimeout(()=>ctl.abort(),6000);
-    const r=await fetch('https://api.dictionaryapi.dev/v2/entries/en/'+encodeURIComponent(w.toLowerCase()),{signal:ctl.signal});clearTimeout(to);
-    const t=r.ok?shortDef(await r.json()):'';
-    defCache[w]=t;try{localStorage.setItem('wwf1def',JSON.stringify(defCache));}catch(e){}
-    put(t||'No short meaning found for this word.');
-  }catch(e){put('Meaning unavailable (needs an internet connection).');}
+  const put=t=>{const el=$('def');if(el&&preview&&preview.word===w)el.textContent=t;};
+  if(defCache[w])return put(defCache[w]);
+  const lw=encodeURIComponent(w.toLowerCase());
+  let sure404=0,failed=0,t='';
+  const r1=await getJson('https://api.dictionaryapi.dev/v2/entries/en/'+lw);
+  if(r1.j)t=defFromDictApi(r1.j);else if(r1.none)sure404++;else failed++;
+  if(!t){
+    const r2=await getJson('https://en.wiktionary.org/api/rest_v1/page/definition/'+lw);
+    if(r2.j)t=defFromWikt(r2.j);else if(r2.none)sure404++;else failed++;
+  }
+  if(t){defCache[w]=t;try{localStorage.setItem('wwf2def',JSON.stringify(defCache));}catch(e){}return put(t);}
+  // only say "none found" when the services answered; a failed request is not remembered
+  put(failed?'Meaning unavailable right now (needs internet). Try again.':'No short meaning found for this word.');
 }
 function find(note){
   if(!trie){msg('Dictionary still loading…');return;}
