@@ -173229,10 +173229,34 @@ function showResults(){
   const bar=$('best');
   if(preview){
     const words=[preview.word].concat(preview.crosses);
-    const tiles=preview.cells.filter(k=>k.isNew).map(k=>(k.blank?'blank as ':'')+k.ch+' at row '+(k.r+1)+', col '+(k.c+1)).join(' · ');
     bar.style.display='block';
-    bar.innerHTML='<div class="m" style="font-weight:700;color:#5b3fd6">'+(results[0]===preview?'BEST PLAY':'SELECTED PLAY')+'</div><div class="row" style="justify-content:space-between;align-items:baseline"><div class="bw">'+preview.word+'</div><div class="sc">'+preview.score+' pts</div></div><div class="m">Purple tiles on the board show where it goes ('+(preview.dir==='across'?'across →':'down ↓')+'). Place: '+tiles+(preview.crosses.length?'. Also forms '+preview.crosses.join(', ')+'.':'.')+(preview.risky?' <b class="warn">⚠ uses a word outside the standard list.</b>':'')+'</div><div class="row" style="margin-top:8px"><button class="go" id="playit">Play it (updates board &amp; rack)</button></div><div class="m" style="margin-top:6px">Game says a word is not valid? Tap it:</div><div class="row" style="margin-top:4px">'+words.map(w=>'<button class="bad" data-rej="'+w+'">✗ '+w+'</button>').join('')+'</div>';
+    bar.innerHTML='<div class="m" style="font-weight:700;color:#5b3fd6">'+(results[0]===preview?'BEST PLAY':'SELECTED PLAY')+'</div><div class="row" style="justify-content:space-between;align-items:baseline"><div class="bw">'+preview.word+'</div><div class="sc">'+preview.score+' pts</div></div><div class="m" id="def">Looking up the meaning…</div>'+(preview.risky?'<div class="m warn">⚠ uses a word outside the standard list</div>':'')+'<div class="row" style="margin-top:6px;align-items:center"><span class="m">Game says no?</span>'+words.map(w=>'<button class="bad" data-rej="'+w+'">✗ '+w+'</button>').join('')+'</div>';
+    showDef(preview.word);
   }else bar.style.display='none';
+}
+const defCache={};
+try{Object.assign(defCache,JSON.parse(localStorage.getItem('wwf1def')||'{}'));}catch(e){}
+function shortDef(j){
+  try{
+    for(const ent of j)for(const m of ent.meanings||[])for(const d of m.definitions||[]){
+      let t=(d.definition||'').trim();if(!t)continue;
+      if(t.length>110){t=t.slice(0,110);t=t.replace(/\s+\S*$/,'')+'…';}
+      return (m.partOfSpeech?m.partOfSpeech+': ':'')+t;
+    }
+  }catch(e){}
+  return '';
+}
+async function showDef(w){
+  const el=()=>$('def');
+  const put=t=>{if(el()&&preview&&preview.word===w)el().textContent=t;};
+  if(defCache[w]!==undefined){put(defCache[w]||'No short meaning found for this word.');return;}
+  try{
+    const ctl=new AbortController();const to=setTimeout(()=>ctl.abort(),6000);
+    const r=await fetch('https://api.dictionaryapi.dev/v2/entries/en/'+encodeURIComponent(w.toLowerCase()),{signal:ctl.signal});clearTimeout(to);
+    const t=r.ok?shortDef(await r.json()):'';
+    defCache[w]=t;try{localStorage.setItem('wwf1def',JSON.stringify(defCache));}catch(e){}
+    put(t||'No short meaning found for this word.');
+  }catch(e){put('Meaning unavailable (needs an internet connection).');}
 }
 function find(note){
   if(!trie){msg('Dictionary still loading…');return;}
@@ -173261,7 +173285,6 @@ $('clearb').onclick=()=>{if(!confirm2){confirm2=true;$('clearb').textContent='Ta
 let confirm2=false;
 $('results').addEventListener('click',e=>{const d=e.target.closest('.res');if(!d)return;preview=results[+d.dataset.i];showResults();render();});
 $('best').addEventListener('click',e=>{
-  if(e.target.id==='playit'){playIt();return;}
   const w=e.target.dataset&&e.target.dataset.rej;if(w){banned.add(w);save();msg(w+' removed from the word list. Re-ranking…');find();}
 });
 $('xl').addEventListener('change',async e=>{
